@@ -1,0 +1,39 @@
+version: "3.9"
+services:
+  mysql:
+    networks:
+      - global
+    image: mysql:latest
+    volumes:
+      - mysql_data:/var/lib/mysql
+    environment:
+      MYSQL_ROOT_PASSWORD: secret
+      MYSQL_DATABASE: products_and_variants
+    ports:
+      - "3306:3306"
+
+  server:
+    networks:
+      - global
+    build: .
+    ports:
+      - "8081:5000"
+    depends_on:
+      - mysql
+    environment:
+      FLASK_APP: backend/app.py
+      FLASK_RUN_HOST: 0.0.0.0
+      MYSQL_ROOT_PASSWORD: secret
+      MYSQL_DATABASE: products_and_variants
+      MYSQL_USER: root
+      MYSQL_HOST: mysql
+      MYSQL_PORT: 3306
+    entrypoint: ["/app/wait-for.sh", "mysql:3306", "--"]
+    command: ["/app/backend/start.sh", "python", "backend/run.py"]
+
+volumes:
+  mysql_data:
+
+networks:
+  global:
+    driver: bridge
