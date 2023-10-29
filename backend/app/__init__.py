@@ -4,22 +4,25 @@ from flask_sqlalchemy import SQLAlchemy
 from flask_jwt_extended import JWTManager
 from flask_bcrypt import Bcrypt
 from flask_migrate import Migrate
+from flask_cors import CORS
 from config import Config
+from .db import db
 
 app = Flask(__name__)
 app.config.from_object(Config)
+CORS(app)
+# CORS(app, resources={r"/*": {"origins": "*"}})
 
-db = SQLAlchemy(app)
 bcrypt = Bcrypt(app)
 jwt = JWTManager(app)
 
+db.init_app(app)
+
 migrate = Migrate(app, db)
 
-from app.auth import auth_bp
-from app.api.products import product_bp
-from app.api.products.variants import variant_bp
+from app.api.products.routes import product_bp
+from app.api.products.variants.routes import variant_bp
 
-app.register_blueprint(auth_bp)
 product_bp.register_blueprint(variant_bp, url_prefix='/<int:product_id>/variants')
 app.register_blueprint(product_bp)
 

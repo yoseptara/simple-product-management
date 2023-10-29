@@ -1,38 +1,65 @@
-from flask import request, jsonify
-from flask_jwt_extended import jwt_required
+from flask import request, jsonify, Blueprint
+from sqlalchemy.orm import joinedload
 
-from app.models.product import Product, ProductImages
-from app.models.image import Image
+from ...db import db
+from ...models.product import Product, ProductImages
+from ...models.image import Image
 
-from app import db
-from app.api.products import product_bp
-
+product_bp = Blueprint('products', __name__, url_prefix='/products')
 
 @product_bp.route('/', methods=['GET'])
-@jwt_required()
 def get():
-    products = Product.query.all()
+    page_number = request.args.get('page', 1, type=int)
+    page_size = request.args.get('pageSize', 10, type=int)
 
+    paginated_query = Product.query.options(
+        joinedload(Product.logo),
+        joinedload(Product.images)
+    ).paginate(page=page_number, per_page=page_size, error_out=False)
+
+    products = paginated_query.items
     product_data = [product.to_dict() for product in products]
 
+    response = {
+        "products": product_data,
+        "total": paginated_query.total,
+        "pages": paginated_query.pages,
+        "page": page_number,
+    }
+
+    return jsonify(response), 200
+
+@product_bp.route('/<int:product_id>', methods=['GET'])
+def get_detail(product_id):
+    product = Product.query.options(
+        joinedload(Product.logo),
+        joinedload(Product.images),
+        joinedload(Product.variants)
+    ).get(product_id)
+    
+    if product is None:
+        return jsonify({"error": "Product not found"}), 404
+
+    product_data = product.to_dict()
+    
     return jsonify(product_data), 200
 
 @product_bp.route('/', methods=['POST'])
-@jwt_required()
 def create():
     if not request.is_json:
         return jsonify({"msg": "Request new product data JSON is not received"}), 400
-    
+
     data = request.json
-    
-    name = data.get('name', None)
-    description = request.json.get('description:', None)
-    image_urls = request.json.get('image_urls', [])
-    logo_url = request.json.get('logo_url', None)
+
+    print(f"check received json : ${data}" )
+    name = data.get('name')
+    description = data.get('description')
+    image_urls = data.get('image_urls', [])
+    logo_url = data.get('logo_url')
 
     if not name:
         return jsonify({"msg": "Product name is required"}), 400
-    
+
     new_logo_image = Image(url=logo_url)
     db.session.add(new_logo_image)
     db.session.flush()
@@ -47,16 +74,16 @@ def create():
     product_images = [ProductImages(product_id=new_product.id, image_id=image.id) for image in image_objects]
     db.session.add_all(product_images)
     db.session.commit()
-    
+
     return jsonify({"msg": "Product created successfully"}), 200
 
 @product_bp.route('/<int:product_id>', methods=['PUT'])
-@jwt_required()
 def update(product_id):
     if not request.is_json:
         return jsonify({"msg": "Request new product data JSON is not received"}), 400
 
     data = request.json
+    
     name = data.get('name')
     description = data.get('description')
     new_image_urls = data.get('image_urls', [])

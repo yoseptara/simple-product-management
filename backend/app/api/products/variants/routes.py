@@ -1,42 +1,62 @@
 from flask import Blueprint, request, jsonify
-from flask_jwt_extended import jwt_required
+from sqlalchemy.orm import joinedload
 
-from backend.app.models.product import Product
-from backend.app.models.variant import Variant, VariantImages
-from backend.app.models.image import Image
+from app.models.product import Product
+from app.models.variant import Variant, VariantImages
+from app.models.image import Image
+from app.db import db
 
-from app import db
-from backend.app.api.products.variants import variant_bp
-
-
+variant_bp = Blueprint('variants', __name__)
 
 @variant_bp.route('/', methods=['GET'])
-@jwt_required()
 def get(product_id):
-    product = Product.query.get_or_404(product_id)
-    variants = Variant.query.filter_by(product_id=product.id).all()
+    page_number = request.args.get('page', 1, type=int)
+    page_size = request.args.get('pageSize', 10, type=int)
 
+    product = Product.query.get_or_404(product_id)
+    paginated_query = Variant.query.options(joinedload(Variant.images)).filter_by(product_id=product.id).paginate(page=page_number, per_page=page_size, error_out=False)
+
+    variants = paginated_query.items
     variant_data = [variant.to_dict() for variant in variants]
 
+    response = {
+        "variants": variant_data,
+        "total": paginated_query.total,
+        "pages": paginated_query.pages,
+        "page": page_number,
+    }
+
+    return jsonify(response), 200
+
+@variant_bp.route('/<int:variant_id>', methods=['GET'])
+def get_detail(product_id, variant_id):
+    variant = Variant.query.options(
+        joinedload(Variant.images),
+    ).get(variant_id)
+    
+    if variant is None:
+        return jsonify({"error": "Variant not found"}), 404
+
+    variant_data = variant.to_dict()
+    
     return jsonify(variant_data), 200
 
 @variant_bp.route('/', methods=['POST'])
-@jwt_required()
 def create(product_id):
     if not request.is_json:
-        return jsonify({"msg": "Request new variant data JSON is not received"}), 400
+        return jsonify({"msg": "Request data must be in JSON format"}), 400
     
-    data = request.json
+    data = request.get_json()
     
     product = Product.query.get_or_404(product_id)
 
-    name = data.get('name', None)
-    size = request.json.get('size', None)
-    color = request.json.get('color', None)
-    image_urls = request.json.get('image_urls', [])
+    name = data.get('name')
+    size = data.get('size')
+    color = data.get('color')
+    image_urls = data.get('image_urls', [])
 
-    if not name or not product_id:
-        return jsonify({"msg": "Product id or variant name are required"}), 400
+    if not name:
+        return jsonify({"msg": "Variant name is required"}), 400
 
     new_variant = Variant(product_id=product.id, name=name, size=size, color=color)
     db.session.add(new_variant)
@@ -52,40 +72,35 @@ def create(product_id):
 
     db.session.commit()
     
-    return jsonify({"msg": "Variant has been created successfully"}), 200
+    return jsonify(new_variant.to_dict()), 201
 
 @variant_bp.route('/<int:variant_id>', methods=['PUT'])
-@jwt_required()
 def update(product_id, variant_id):
     if not request.is_json:
-        return jsonify({"msg": "Request new variant data JSON is not received"}), 400
+        return jsonify({"msg": "Request data must be in JSON format"}), 400
     
-    data = request.json
+    data = request.get_json()
     
     Product.query.get_or_404(product_id)
     variant = Variant.query.get_or_404(variant_id)
 
-    name = data.get('name', None)
-    size = request.json.get('size', None)
-    color = request.json.get('color', None)
-    new_image_urls = request.json.get('image_urls', [])
+    name = data.get('name')
+    size = data.get('size')
+    color = data.get('color')
+    new_image_urls = data.get('image_urls', [])
     deleted_image_ids = data.get('deleted_image_ids', [])
 
-    if not product_id or not variant_id:
-        return jsonify({"msg": "Product id or variant id are required"}), 400
-    
-    variant.name = name
-    variant.size = size
-    variant.color = color
+    variant.name = name if name is not None else variant.name
+    variant.size = size if size is not None else variant.size
+    variant.color = color if color is not None else variant.color
 
     for image_id in deleted_image_ids:
         image = VariantImages.query.filter_by(variant_id=variant.id, image_id=image_id).first()
         if image:
             db.session.delete(image)
 
-        image = Image.query.get(image_id)
-        if image:
-            db.session.delete(image)
+        db.session.flush()
+        Image.query.filter_by(id=image_id).delete()
 
     if new_image_urls:
         new_images = [Image(url=url) for url in new_image_urls]
@@ -96,4 +111,4 @@ def update(product_id, variant_id):
         db.session.add_all(new_variant_images)
 
     db.session.commit()
-    return jsonify({"msg": "Variant has been updated successfully"}), 200
+    return jsonify(variant.to_dict()), 200

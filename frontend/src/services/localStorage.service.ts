@@ -1,11 +1,11 @@
 import { UserModel } from "@src/domain/UserModel";
-const avatarImg = process.env.REACT_APP_ASSETS_BUCKET + "/avatars/avatar5.webp";
 
 const testUser = {
   id: 1,
   firstName: "Yosep",
   lastName: "Tara",
-  imgUrl: avatarImg,
+  imgUrl:
+    "https://upload.wikimedia.org/wikipedia/commons/thumb/8/8a/Banana-Single.jpg/2324px-Banana-Single.jpg",
   userName: "@john1989",
   email: {
     name: "yoseptara@abcd.com",

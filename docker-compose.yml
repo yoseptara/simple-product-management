@@ -12,10 +12,12 @@ services:
     ports:
       - "3306:3306"
 
-  server:
+  backend:
     networks:
       - global
-    build: .
+    build:
+      context: .
+      dockerfile: Dockerfile
     ports:
       - "8081:5000"
     depends_on:
@@ -30,6 +32,19 @@ services:
       MYSQL_PORT: 3306
     entrypoint: ["/app/wait-for.sh", "mysql:3306", "--"]
     command: ["/app/backend/start.sh", "python", "backend/run.py"]
+
+  frontend:
+    networks:
+      - global
+    build:
+      context: .
+      dockerfile: Dockerfile.frontend
+    ports:
+      - "8082:80"
+    depends_on:
+      - backend
+    environment:
+      VITE_API_BASE_URL: "http://backend:5000"
 
 volumes:
   mysql_data:

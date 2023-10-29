@@ -4,15 +4,12 @@ import { ApiError } from "@src/api/ApiError";
 import { readToken } from "@src/services/localStorage.service";
 
 export const httpApi = axios.create({
-  baseURL: process.env.REACT_APP_BASE_URL,
+  baseURL: import.meta.env.VITE_API_BASE_URL,
+  // baseURL: "http://localhost:8081",
 });
 
 httpApi.interceptors.request.use((config) => {
   config.headers.setAuthorization(`Bearer ${readToken()}`);
-  // config.headers = {
-  //   ...config.headers,
-  //   Authorization: `Bearer ${readToken()}`,
-  // };
 
   return config;
 });
